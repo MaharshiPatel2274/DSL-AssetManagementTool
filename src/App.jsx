@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import FileExplorer from './components/FileExplorer';
 import AssetViewer from './components/AssetViewer';
 import MetadataPanel from './components/MetadataPanel';
@@ -8,6 +8,10 @@ function App() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [previewFile, setPreviewFile] = useState(null);
   const [fileMetadata, setFileMetadata] = useState({});
+  const [leftWidth, setLeftWidth] = useState(300);
+  const [rightWidth, setRightWidth] = useState(350);
+  const isDraggingLeft = useRef(false);
+  const isDraggingRight = useRef(false);
 
   const handleExport = async () => {
     if (selectedFiles.length === 0) {
@@ -74,6 +78,39 @@ function App() {
     }
   };
 
+  const handleMouseDown = (side) => (e) => {
+    e.preventDefault();
+    if (side === 'left') {
+      isDraggingLeft.current = true;
+    } else {
+      isDraggingRight.current = true;
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (isDraggingLeft.current) {
+      const newWidth = Math.max(200, Math.min(600, e.clientX));
+      setLeftWidth(newWidth);
+    } else if (isDraggingRight.current) {
+      const newWidth = Math.max(250, Math.min(600, window.innerWidth - e.clientX));
+      setRightWidth(newWidth);
+    }
+  };
+
+  const handleMouseUp = () => {
+    isDraggingLeft.current = false;
+    isDraggingRight.current = false;
+  };
+
+  useEffect(() => {
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   return (
     <div className="app">
       <header className="app-header">
@@ -87,21 +124,38 @@ function App() {
       </header>
       
       <div className="app-content">
-        <FileExplorer 
-          onSelectionChange={setSelectedFiles}
-          onFileDoubleClick={setPreviewFile}
+        <div className="file-explorer-wrapper" style={{ width: `${leftWidth}px` }}>
+          <FileExplorer 
+            onSelectionChange={setSelectedFiles}
+            onFileDoubleClick={setPreviewFile}
+          />
+        </div>
+        
+        <div 
+          className="resizer resizer-left" 
+          onMouseDown={handleMouseDown('left')}
         />
         
-        <AssetViewer 
-          file={previewFile}
+        <div className="asset-viewer-wrapper" style={{ flex: 1 }}>
+          <AssetViewer 
+            file={previewFile}
+            selectedFiles={selectedFiles}
+          />
+        </div>
+        
+        <div 
+          className="resizer resizer-right" 
+          onMouseDown={handleMouseDown('right')}
         />
         
-        <MetadataPanel 
-          selectedFiles={selectedFiles}
-          currentFile={previewFile}
-          metadata={previewFile ? fileMetadata[previewFile.path] : null}
-          onMetadataUpdate={handleMetadataUpdate}
-        />
+        <div className="metadata-panel-wrapper" style={{ width: `${rightWidth}px` }}>
+          <MetadataPanel 
+            selectedFiles={selectedFiles}
+            currentFile={previewFile}
+            metadata={previewFile ? fileMetadata[previewFile.path] : null}
+            onMetadataUpdate={handleMetadataUpdate}
+          />
+        </div>
       </div>
     </div>
   );

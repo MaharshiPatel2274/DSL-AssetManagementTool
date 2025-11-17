@@ -4,6 +4,7 @@ import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 
 const Model3D = ({ filePath }) => {
   const [error, setError] = useState(null);
@@ -54,7 +55,7 @@ const Loader = () => {
   return (
     <mesh>
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="#00ff88" wireframe />
+      <meshStandardMaterial color="hsla(111, 67%, 29%, 1.00)" wireframe />
     </mesh>
   );
 };
@@ -97,6 +98,24 @@ const ModelLoader = ({ filePath, onError }) => {
               (gltf) => resolve(gltf.scene),
               reject
             );
+          });
+        }
+        else if (ext === 'fbx') {
+          loader = new FBXLoader();
+          const result = await window.electron.readFile(filePath);
+          if (!result.success) {
+            throw new Error(result.error);
+          }
+          
+          const arrayBuffer = Uint8Array.from(atob(result.data), c => c.charCodeAt(0)).buffer;
+          
+          loadedObject = await new Promise((resolve, reject) => {
+            try {
+              const fbx = loader.parse(arrayBuffer, '');
+              resolve(fbx);
+            } catch (err) {
+              reject(err);
+            }
           });
         }
         else {
