@@ -44,11 +44,24 @@ A professional desktop application for managing metadata of asset files (3D mode
 
 ## 🚀 Quick Start
 
-### Run the Pre-built Application
+### Build from Source
 
-1. Navigate to `dist-packaged\AssetMetadataTool-win32-x64\`
-2. Double-click `AssetMetadataTool.exe`
-3. The application will launch immediately
+```bash
+# Clone the repository
+git clone https://github.com/MaharshiPatel2274/DSL-AssetManagementTool
+cd DSL-AssetManagementTool
+
+# Install dependencies
+npm install
+
+# Build React app
+npm run build
+
+# Package as standalone .exe
+npm run package
+```
+
+Output location: `dist-packaged\AssetMetadataTool-win32-x64\AssetMetadataTool.exe`
 
 ### Development Mode
 
@@ -62,18 +75,6 @@ npm run dev
 # Start Electron app (Terminal 2)
 npm run electron:dev
 ```
-
-### Build from Source
-
-```bash
-# Build React app
-npm run build
-
-# Package as standalone .exe
-npm run package
-```
-
-Output location: `dist-packaged\AssetMetadataTool-win32-x64\AssetMetadataTool.exe`
 
 ## 📖 How to Use
 
