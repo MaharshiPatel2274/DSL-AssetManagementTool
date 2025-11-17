@@ -44,7 +44,27 @@ A professional desktop application for managing metadata of asset files (3D mode
 
 ## 🚀 Quick Start
 
-### Build from Source
+### Automated Installation (Recommended for End Users)
+
+**Just run the installer - it does everything!**
+
+1. **Download** the project from GitHub
+2. **Extract** to a folder (e.g., `C:\AssetMetadataTool`)
+3. **Right-click** `install.bat` → **"Run as administrator"**
+4. **Wait** for automatic setup (5-10 minutes):
+   - ✅ Checks for Node.js
+   - ✅ Downloads Node.js if needed
+   - ✅ Installs dependencies
+   - ✅ Builds the app
+   - ✅ Creates the executable
+   - ✅ Launches the app
+5. **Done!** Application starts automatically
+
+**Note:** After first installation, just double-click `install.bat` anytime to launch the app.
+
+---
+
+### Manual Build from Source (For Developers)
 
 ```bash
 # Clone the repository
@@ -78,51 +98,80 @@ npm run electron:dev
 
 ## 📖 How to Use
 
-### 1. Browse and Select Files
-1. Click the green **"BROWSE FOLDER"** button
-2. Select a directory containing your assets
-3. The folder structure will appear in the left panel
-4. Click folders to expand/collapse
-5. Check boxes to select files for metadata editing
+### Basic Workflow
 
-### 2. Preview Assets
-1. Double-click any image or 3D model file
-2. The preview will appear in the center panel
+**Step 1: Load Your Assets**
+1. Click the green **"BROWSE FOLDER"** button
+2. Select folder with your assets
+3. Folder structure loads automatically
+
+**Step 2: Select Files**
+1. Click folders to expand/collapse
+2. Check boxes next to files you want to edit
+3. File count updates: "X files selected"
+
+**Step 3: Preview (Optional)**
+1. Double-click any image or 3D model
+2. Preview appears in center panel
 3. For 3D models:
    - Left-click + drag to rotate
    - Right-click + drag to pan
    - Scroll to zoom
 
-### 3. Edit Metadata
+**Step 4: Edit Metadata**
 
-**Batch Mode** (default):
+*Batch Mode (default):*
 1. Select multiple files with checkboxes
 2. Enter metadata values
 3. Click individual "Apply" buttons or "Apply All"
 4. Metadata applies to all selected files
 
-**Single File Mode**:
+*Single File Mode:*
 1. Click the "SINGLE FILE" tab
 2. Double-click a file to select it
 3. Edit metadata for that specific file
 4. Changes apply only to the selected file
 
-### 4. Add Custom Fields
+**Step 5: Add Custom Fields**
 1. Click **"+ Add Field"** in the Custom Fields section
 2. Enter a key name and value
 3. Click "Apply" to save
 4. Remove fields with the red "X" button
 
-### 5. Export Metadata
+**Step 6: Export Metadata**
 1. Select files you want to export
 2. Click **"EXPORT TO JSON"** in the top-right
 3. Choose a save location
 4. JSON file includes all metadata and file information
 
-## 🎨 UI Design
+### Tips & Tricks
 
-- **Color Scheme**: Clean white with bright green (#00ff88) accents
-- **Layout**: Three-panel design (Explorer | Viewer | Metadata)
+**Organize Your Assets:**
+- Use the search box to filter files
+- Tags support comma-separated values: `3d, character, rigged`
+- Version field helps track iterations
+
+**Custom Metadata:**
+- Add any metadata you need: "License", "Creator", "Project", "Status"
+- Each file can have different custom fields
+
+**Batch Editing Power:**
+- Select 100+ files at once
+- Apply the same author to all
+- Add project tags to entire folders
+- Update versions across multiple assets
+
+**Panel Resizing:**
+- Drag the dividers between panels to resize
+- Customize your workspace layout
+- Changes persist during the session
+
+## 🎨 UI Features
+
+- **Color Scheme**: Clean white with Lincoln green (#3D8B1F) accents
+- **Layout**: Three resizable panels (Explorer | Viewer | Metadata)
+- **Resizable Panels**: Drag dividers to customize workspace
+- **Multi-file Grid View**: Preview multiple assets side-by-side
 - **Professional**: Modern, intuitive interface
 - **Responsive**: Smooth interactions and transitions
 
@@ -255,20 +304,28 @@ This project is for asset management purposes.
 
 ✅ Working file explorer with expandable folder tree  
 ✅ Multi-file selection with checkboxes  
-✅ 3D model preview (Three.js) for .obj, .gltf, .glb  
+✅ 3D model preview for .obj, .gltf, .glb, .fbx files  
+✅ Multi-file grid preview (side-by-side)  
 ✅ Image preview  
 ✅ Batch metadata editing  
 ✅ Single file metadata editing  
 ✅ Custom metadata fields (add/remove)  
+✅ Resizable panels with draggable dividers  
 ✅ JSON export with all data  
-✅ Standalone .exe  
-✅ White/green professional UI  
-✅ No console errors  
-✅ Smooth performance
+✅ Standalone .exe with automated installer  
+✅ Professional UI with Lincoln green accents  
+✅ Smooth performance  
 
 ## 🚀 Version
 
 **Version 1.0.0** - Initial Release
+
+### Latest Features:
+- ✨ FBX file support for 3D models
+- ✨ Multi-file grid preview
+- ✨ Resizable panels
+- ✨ Lincoln green color scheme
+- ✨ Automated installer script
 
 Built with ❤️ using React and Electron
 
