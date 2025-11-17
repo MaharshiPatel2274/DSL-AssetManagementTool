@@ -1,0 +1,66 @@
+.asset-viewer {
+  flex: 1;
+  background: #1a1a1a;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.viewer-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #999999;
+  text-align: center;
+  padding: 40px;
+}
+
+.viewer-placeholder h3 {
+  margin-top: 20px;
+  font-size: 18px;
+  font-weight: 500;
+  color: #cccccc;
+}
+
+.viewer-placeholder p {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #888888;
+}
+
+.viewer-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.image-preview {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.loading {
+  color: #999999;
+  font-size: 16px;
+}
+
+.viewer-info {
+  padding: 15px 20px;
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 14px;
+  text-align: center;
+}
+
+.file-name {
+  font-weight: 500;
+}
