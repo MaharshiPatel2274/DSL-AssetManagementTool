@@ -45,7 +45,7 @@ A professional desktop application for managing metadata of asset files (3D mode
 ## 🚀 Quick Start
 
 ### Build from Source
-
+Pre-requisites: Please ensure that Node.js is installed in your local pc. Here is the link if you havent installed already https://nodejs.org/en/download
 ```bash
 # Clone the repository
 git clone https://github.com/MaharshiPatel2274/DSL-AssetManagementTool
