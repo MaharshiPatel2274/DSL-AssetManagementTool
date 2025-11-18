@@ -26,32 +26,52 @@ if %errorlevel% neq 0 (
     echo Node.js is not installed.
     echo.
     echo Downloading Node.js installer...
+    echo This may take a few moments depending on your connection...
     
-    REM Download Node.js LTS installer
-    powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi' -OutFile '%TEMP%\nodejs-installer.msi' } catch { exit 1 }"
+    REM Download Node.js LTS installer using PowerShell with better error handling
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $ProgressPreference = 'SilentlyContinue'; try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls; $url = 'https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi'; $output = Join-Path $env:TEMP 'nodejs-installer.msi'; Write-Host 'Downloading from nodejs.org...'; Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing; Write-Host 'Download complete!'; exit 0 } catch { Write-Host 'Download failed: ' $_.Exception.Message; exit 1 } }"
     
     if %errorlevel% neq 0 (
-        echo Failed to download Node.js installer.
-        echo Please download manually from: https://nodejs.org/
+        echo.
+        echo ========================================
+        echo  Download Failed
+        echo ========================================
+        echo.
+        echo Could not download Node.js automatically.
+        echo This could be due to:
+        echo   - Network/firewall restrictions
+        echo   - Proxy settings
+        echo   - Internet connectivity issues
+        echo.
+        echo Please install Node.js manually:
+        echo   1. Visit: https://nodejs.org/
+        echo   2. Download the LTS version ^(Windows Installer^)
+        echo   3. Install it
+        echo   4. Run this script again
+        echo.
         pause
         exit /b 1
     )
     
+    echo.
     echo Installing Node.js... (This may take a few minutes)
-    echo Please follow the installer prompts.
-    start /wait msiexec /i "%TEMP%\nodejs-installer.msi" /passive
+    echo Please wait for the installer to complete.
+    start /wait msiexec /i "%TEMP%\nodejs-installer.msi" /passive /norestart
     
     if %errorlevel% neq 0 (
+        echo.
         echo Installation failed or was cancelled.
+        echo Please try running this script as Administrator.
         pause
         exit /b 1
     )
     
     REM Refresh environment variables
     echo.
-    echo Node.js installed! Refreshing environment...
+    echo Node.js installed successfully!
     echo.
     echo Please close this window and run install.bat again to continue.
+    echo The PATH environment variable needs to be refreshed.
     pause
     exit /b 0
 ) else (
