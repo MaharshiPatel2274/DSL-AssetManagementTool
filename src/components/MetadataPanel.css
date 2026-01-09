@@ -64,6 +64,167 @@
   text-align: center;
 }
 
+/* Perforce Integration Styles */
+.p4-section {
+  margin-bottom: 20px;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.p4-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background: #ffffff;
+  border-bottom: 1px solid #e0e0e0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.p4-header:hover {
+  background: #f9f9f9;
+}
+
+.p4-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+}
+
+.p4-connection-status {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+}
+
+.p4-connection-status.connected {
+  color: #3D8B1F;
+  background: rgba(61, 139, 31, 0.1);
+}
+
+.p4-connection-status.disconnected {
+  color: #ff9800;
+  background: rgba(255, 152, 0, 0.1);
+}
+
+.p4-toggle {
+  color: #999;
+  font-size: 10px;
+}
+
+.p4-details {
+  padding: 12px 15px;
+  background: #fafafa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.p4-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.p4-detail-row svg {
+  color: #999;
+}
+
+.p4-label {
+  font-weight: 500;
+  color: #666;
+  min-width: 70px;
+}
+
+.p4-value {
+  color: #333;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.p4-value.p4-server {
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.p4-buttons {
+  display: flex;
+  gap: 10px;
+  padding: 15px;
+}
+
+.p4-checkout-btn,
+.p4-add-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #3D8B1F, #2d6617);
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.p4-add-btn {
+  background: linear-gradient(135deg, #2196F3, #1976D2);
+}
+
+.p4-checkout-btn:hover:not(:disabled),
+.p4-add-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.p4-checkout-btn:disabled,
+.p4-add-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.p4-status {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #666666;
+  justify-content: center;
+  padding: 0 15px 15px;
+  flex-wrap: wrap;
+}
+
+.p4-checked-out,
+.p4-locked,
+.p4-not-tracked {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.p4-checked-out {
+  color: #3D8B1F;
+}
+
+.p4-locked {
+  color: #ff9800;
+}
+
+.p4-not-tracked {
+  color: #999;
+}
+
 .metadata-section {
   margin-bottom: 20px;
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, GitBranch, Lock, Unlock, Server, User, FolderGit } from 'lucide-react';
 import './MetadataPanel.css';
 
 const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate }) => {
@@ -12,6 +12,47 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate 
     notes: '',
   });
   const [customFields, setCustomFields] = useState([]);
+  const [p4Available, setP4Available] = useState(false);
+  const [p4Info, setP4Info] = useState(null);
+  const [p4Status, setP4Status] = useState({});
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [showP4Details, setShowP4Details] = useState(false);
+
+  // Check if P4 is available and get info
+  useEffect(() => {
+    const checkP4 = async () => {
+      if (window.electron && window.electron.p4CheckAvailable) {
+        const result = await window.electron.p4CheckAvailable();
+        setP4Available(result.available);
+        
+        if (result.available && window.electron.p4GetInfo) {
+          const info = await window.electron.p4GetInfo();
+          if (info.success) {
+            setP4Info(info);
+          }
+        }
+      }
+    };
+    checkP4();
+  }, []);
+
+  // Check P4 status for selected files
+  useEffect(() => {
+    const checkFilesStatus = async () => {
+      if (!p4Available || selectedFiles.length === 0) return;
+      
+      const statusMap = {};
+      for (const file of selectedFiles) {
+        if (window.electron && window.electron.p4CheckFileStatus) {
+          const status = await window.electron.p4CheckFileStatus(file.path);
+          statusMap[file.path] = status;
+        }
+      }
+      setP4Status(statusMap);
+    };
+    
+    checkFilesStatus();
+  }, [p4Available, selectedFiles]);
 
   useEffect(() => {
     if (mode === 'single' && metadata) {
@@ -97,6 +138,81 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate 
     onMetadataUpdate(metadataUpdate, mode === 'batch');
   };
 
+  const handleP4Checkout = async () => {
+    if (!p4Available || selectedFiles.length === 0) return;
+    
+    setIsCheckingOut(true);
+    const filesToCheckout = selectedFiles.map(f => f.path);
+    
+    try {
+      const results = await window.electron.p4CheckoutFiles(filesToCheckout);
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.length - successCount;
+      
+      if (successCount > 0 && failCount === 0) {
+        // All successful - show brief success message
+        console.log(`P4: ${successCount} file(s) checked out`);
+      } else if (successCount > 0) {
+        alert(`P4: ${successCount} checked out, ${failCount} failed`);
+      } else {
+        // All failed - show first error
+        const firstError = results.find(r => !r.success);
+        alert(`P4 Checkout failed:\n${firstError?.error || 'Unknown error'}`);
+      }
+      
+      // Refresh P4 status
+      const statusMap = {};
+      for (const file of selectedFiles) {
+        const status = await window.electron.p4CheckFileStatus(file.path);
+        statusMap[file.path] = status;
+      }
+      setP4Status(statusMap);
+    } catch (error) {
+      alert('P4 error: ' + error.message);
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
+
+  const handleP4Add = async () => {
+    if (!p4Available || selectedFiles.length === 0) return;
+    
+    setIsCheckingOut(true);
+    
+    try {
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (const file of selectedFiles) {
+        const result = await window.electron.p4AddFile(file.path);
+        if (result.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      }
+      
+      if (successCount > 0) {
+        console.log(`P4: ${successCount} file(s) marked for add`);
+      }
+      if (failCount > 0) {
+        alert(`P4 Add: ${successCount} added, ${failCount} failed`);
+      }
+      
+      // Refresh status
+      const statusMap = {};
+      for (const file of selectedFiles) {
+        const status = await window.electron.p4CheckFileStatus(file.path);
+        statusMap[file.path] = status;
+      }
+      setP4Status(statusMap);
+    } catch (error) {
+      alert('P4 error: ' + error.message);
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
+
   const handleApplyAll = () => {
     const allMetadata = {
       ...formData,
@@ -162,6 +278,108 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate 
             <span>{currentFile ? `Editing: ${currentFile.name}` : 'No file selected'}</span>
           )}
         </div>
+
+        {/* Perforce Integration */}
+        {p4Available && (
+          <div className="p4-section">
+            {/* P4 Connection Header */}
+            <div 
+              className="p4-header" 
+              onClick={() => setShowP4Details(!showP4Details)}
+            >
+              <div className="p4-title">
+                <GitBranch size={16} />
+                <span>Perforce</span>
+                <span className={`p4-connection-status ${p4Info?.connected ? 'connected' : 'disconnected'}`}>
+                  {p4Info?.connected ? '● Connected' : '○ Not Connected'}
+                </span>
+              </div>
+              <span className="p4-toggle">{showP4Details ? '▼' : '▶'}</span>
+            </div>
+
+            {/* P4 Connection Details */}
+            {showP4Details && p4Info && (
+              <div className="p4-details">
+                <div className="p4-detail-row">
+                  <User size={14} />
+                  <span className="p4-label">User:</span>
+                  <span className="p4-value">{p4Info.user}</span>
+                </div>
+                <div className="p4-detail-row">
+                  <FolderGit size={14} />
+                  <span className="p4-label">Workspace:</span>
+                  <span className="p4-value">{p4Info.client}</span>
+                </div>
+                <div className="p4-detail-row">
+                  <Server size={14} />
+                  <span className="p4-label">Server:</span>
+                  <span className="p4-value p4-server">{p4Info.server}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Checkout Button - only show when files selected */}
+            {selectedFiles.length > 0 && (
+              <>
+                <div className="p4-buttons">
+                  {/* Show Checkout for files in depot */}
+                  {Object.values(p4Status).some(s => s.inDepot && !s.checkedOut) && (
+                    <button 
+                      className="p4-checkout-btn" 
+                      onClick={handleP4Checkout}
+                      disabled={isCheckingOut}
+                    >
+                      <Unlock size={16} />
+                      {isCheckingOut ? 'Working...' : 'Checkout'}
+                    </button>
+                  )}
+                  
+                  {/* Show Add for files not in depot */}
+                  {Object.values(p4Status).some(s => !s.inDepot) && (
+                    <button 
+                      className="p4-add-btn" 
+                      onClick={handleP4Add}
+                      disabled={isCheckingOut}
+                    >
+                      <Plus size={16} />
+                      {isCheckingOut ? 'Working...' : 'Add to Depot'}
+                    </button>
+                  )}
+                  
+                  {/* Show generic checkout if no status yet */}
+                  {Object.keys(p4Status).length === 0 && (
+                    <button 
+                      className="p4-checkout-btn" 
+                      onClick={handleP4Checkout}
+                      disabled={isCheckingOut}
+                    >
+                      <GitBranch size={16} />
+                      {isCheckingOut ? 'Working...' : `Checkout ${selectedFiles.length} file(s)`}
+                    </button>
+                  )}
+                </div>
+                
+                <div className="p4-status">
+                  {Object.values(p4Status).filter(s => s.checkedOut).length > 0 && (
+                    <span className="p4-checked-out">
+                      <Unlock size={14} /> {Object.values(p4Status).filter(s => s.checkedOut).length} checked out
+                    </span>
+                  )}
+                  {Object.values(p4Status).filter(s => s.inDepot && !s.checkedOut).length > 0 && (
+                    <span className="p4-locked">
+                      <Lock size={14} /> {Object.values(p4Status).filter(s => s.inDepot && !s.checkedOut).length} in depot
+                    </span>
+                  )}
+                  {Object.values(p4Status).filter(s => !s.inDepot).length > 0 && (
+                    <span className="p4-not-tracked">
+                      <Plus size={14} /> {Object.values(p4Status).filter(s => !s.inDepot).length} not in depot
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="metadata-section">
           <label className="field-label">TITLE</label>
