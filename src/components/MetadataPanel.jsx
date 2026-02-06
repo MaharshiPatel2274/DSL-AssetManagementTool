@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, X, GitBranch, Lock, Unlock, Server, User, FolderGit } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, X, GitBranch, Lock, Unlock, Server, User, FolderGit, ExternalLink, RefreshCw } from 'lucide-react';
 import './MetadataPanel.css';
 
-const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate }) => {
+const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate, onOpenP4Panel }) => {
   const [mode, setMode] = useState('batch'); // 'batch' or 'single'
   const [formData, setFormData] = useState({
     title: '',
@@ -14,9 +14,12 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate 
   const [customFields, setCustomFields] = useState([]);
   const [p4Available, setP4Available] = useState(false);
   const [p4Info, setP4Info] = useState(null);
+  const [p4Connected, setP4Connected] = useState(false);
   const [p4Status, setP4Status] = useState({});
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [showP4Details, setShowP4Details] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const connectionCheckInterval = useRef(null);
 
   // Check if P4 is available and get info
   useEffect(() => {
@@ -29,12 +32,68 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate 
           const info = await window.electron.p4GetInfo();
           if (info.success) {
             setP4Info(info);
+            setP4Connected(info.connected || false);
           }
         }
       }
     };
     checkP4();
   }, []);
+
+  // Live connection checking - every 30 seconds
+  useEffect(() => {
+    if (!p4Available) return;
+
+    const checkConnection = async () => {
+      if (window.electron && window.electron.p4CheckConnection) {
+        const result = await window.electron.p4CheckConnection();
+        setP4Connected(result.connected);
+        if (result.info) {
+          setP4Info(prev => ({ ...prev, ...result.info }));
+        }
+      }
+    };
+
+    // Initial check
+    checkConnection();
+
+    // Set up interval for live checking
+    connectionCheckInterval.current = setInterval(checkConnection, 30000);
+
+    return () => {
+      if (connectionCheckInterval.current) {
+        clearInterval(connectionCheckInterval.current);
+      }
+    };
+  }, [p4Available]);
+
+  // Manual refresh function
+  const handleRefreshConnection = async () => {
+    setIsRefreshing(true);
+    try {
+      if (window.electron && window.electron.p4CheckConnection) {
+        const result = await window.electron.p4CheckConnection();
+        setP4Connected(result.connected);
+        if (result.info) {
+          setP4Info(prev => ({ ...prev, ...result.info }));
+        }
+      }
+      
+      // Also refresh file status
+      if (selectedFiles.length > 0) {
+        const statusMap = {};
+        for (const file of selectedFiles) {
+          if (window.electron && window.electron.p4CheckFileStatus) {
+            const status = await window.electron.p4CheckFileStatus(file.path);
+            statusMap[file.path] = status;
+          }
+        }
+        setP4Status(statusMap);
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Check P4 status for selected files
   useEffect(() => {
@@ -290,11 +349,24 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate 
               <div className="p4-title">
                 <GitBranch size={16} />
                 <span>Perforce</span>
-                <span className={`p4-connection-status ${p4Info?.connected ? 'connected' : 'disconnected'}`}>
-                  {p4Info?.connected ? '● Connected' : '○ Not Connected'}
+                <span className={`p4-connection-status ${p4Connected ? 'connected' : 'disconnected'}`}>
+                  {p4Connected ? '● Connected' : '○ Disconnected'}
                 </span>
               </div>
-              <span className="p4-toggle">{showP4Details ? '▼' : '▶'}</span>
+              <div className="p4-header-actions">
+                <button 
+                  className="p4-refresh-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRefreshConnection();
+                  }}
+                  disabled={isRefreshing}
+                  title="Refresh connection"
+                >
+                  <RefreshCw size={14} className={isRefreshing ? 'spinning' : ''} />
+                </button>
+                <span className="p4-toggle">{showP4Details ? '▼' : '▶'}</span>
+              </div>
             </div>
 
             {/* P4 Connection Details */}
@@ -315,6 +387,18 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate 
                   <span className="p4-label">Server:</span>
                   <span className="p4-value p4-server">{p4Info.server}</span>
                 </div>
+                
+                {/* Open Full P4 Panel Button */}
+                <button 
+                  className="p4-open-panel-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onOpenP4Panel) onOpenP4Panel();
+                  }}
+                >
+                  <ExternalLink size={14} />
+                  Open Pending Changes
+                </button>
               </div>
             )}
 

@@ -115,6 +115,44 @@
   background: rgba(255, 152, 0, 0.1);
 }
 
+.p4-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.p4-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.p4-refresh-btn:hover {
+  background: rgba(61, 139, 31, 0.1);
+  color: #3D8B1F;
+}
+
+.p4-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.p4-refresh-btn .spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .p4-toggle {
   color: #999;
   font-size: 10px;
@@ -153,6 +191,30 @@
 .p4-value.p4-server {
   font-size: 11px;
   word-break: break-all;
+}
+
+.p4-open-panel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #3D8B1F, #2d6617);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.p4-open-panel-btn:hover {
+  background: linear-gradient(135deg, #4a9e2a, #3a7a1d);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(61, 139, 31, 0.3);
 }
 
 .p4-buttons {

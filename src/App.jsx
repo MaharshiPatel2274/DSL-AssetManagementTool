@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import FileExplorer from './components/FileExplorer';
 import AssetViewer from './components/AssetViewer';
 import MetadataPanel from './components/MetadataPanel';
+import P4Panel from './components/P4Panel';
 import './App.css';
 
 function App() {
@@ -10,6 +11,7 @@ function App() {
   const [fileMetadata, setFileMetadata] = useState({});
   const [leftWidth, setLeftWidth] = useState(300);
   const [rightWidth, setRightWidth] = useState(350);
+  const [showP4Panel, setShowP4Panel] = useState(false);
   const isDraggingLeft = useRef(false);
   const isDraggingRight = useRef(false);
 
@@ -154,9 +156,16 @@ function App() {
             currentFile={previewFile}
             metadata={previewFile ? fileMetadata[previewFile.path] : null}
             onMetadataUpdate={handleMetadataUpdate}
+            onOpenP4Panel={() => setShowP4Panel(true)}
           />
         </div>
       </div>
+      
+      {/* P4 Panel Overlay */}
+      <P4Panel 
+        isOpen={showP4Panel}
+        onClose={() => setShowP4Panel(false)}
+      />
     </div>
   );
 }

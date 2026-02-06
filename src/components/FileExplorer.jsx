@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Folder, File, ChevronRight, ChevronDown, Search } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Folder, File, ChevronRight, ChevronDown, Search, RefreshCw } from 'lucide-react';
 import './FileExplorer.css';
 
 const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
@@ -8,6 +8,55 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [selectedFiles, setSelectedFiles] = useState(new Set());
   const [searchTerm, setSearchTerm] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const cleanupRef = useRef(null);
+
+  // Refresh the file tree
+  const refreshFileTree = useCallback(async () => {
+    if (!rootPath) return;
+    
+    setIsRefreshing(true);
+    try {
+      const tree = await window.electron.readDirectoryTree(rootPath);
+      setFileTree(tree);
+      
+      // Clean up selections that no longer exist
+      setSelectedFiles(prev => {
+        const newSelected = new Set();
+        const collectPaths = (node) => {
+          if (node.type === 'file' && prev.has(node.path)) {
+            newSelected.add(node.path);
+          } else if (node.children) {
+            node.children.forEach(collectPaths);
+          }
+        };
+        if (tree) collectPaths(tree);
+        return newSelected;
+      });
+    } catch (error) {
+      console.error('Error refreshing file tree:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [rootPath]);
+
+  // Listen for file system changes
+  useEffect(() => {
+    if (!window.electron?.onFileSystemChanged) return;
+    
+    // Set up listener
+    cleanupRef.current = window.electron.onFileSystemChanged((data) => {
+      console.log('File system changed:', data);
+      refreshFileTree();
+    });
+    
+    // Cleanup on unmount
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
+    };
+  }, [refreshFileTree]);
 
   const handleBrowseFolder = async () => {
     const path = await window.electron.selectFolder();
@@ -160,9 +209,21 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
 
   return (
     <div className="file-explorer">
-      <button className="browse-button" onClick={handleBrowseFolder}>
-        BROWSE FOLDER
-      </button>
+      <div className="explorer-header">
+        <button className="browse-button" onClick={handleBrowseFolder}>
+          BROWSE FOLDER
+        </button>
+        {rootPath && (
+          <button 
+            className="refresh-button" 
+            onClick={refreshFileTree}
+            disabled={isRefreshing}
+            title="Refresh file list"
+          >
+            <RefreshCw size={16} className={isRefreshing ? 'spinning' : ''} />
+          </button>
+        )}
+      </div>
 
       {rootPath && (
         <div className="current-path">
