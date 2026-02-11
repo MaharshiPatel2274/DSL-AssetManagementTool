@@ -1,0 +1,14 @@
+﻿# Electron / build outputs
+release/
+dist/
+out/
+build/
+*.zip
+*.exe
+*.asar
+
+# Node / tooling
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
