@@ -49,10 +49,15 @@ const AssetViewer = ({ file, selectedFiles }) => {
     return ['obj', 'gltf', 'glb', 'fbx', 'dae', 'stl'].includes(ext);
   };
 
+  const isMaterialFile = (fileName) => {
+    const ext = fileName.toLowerCase().split('.').pop();
+    return ext === 'mat';
+  };
+
   // If multiple files are selected, show grid view
   if (selectedFiles && selectedFiles.length > 1) {
     const previewableFiles = selectedFiles.filter(f => 
-      isImageFile(f.name) || is3DFile(f.name)
+      isImageFile(f.name) || is3DFile(f.name) || isMaterialFile(f.name)
     );
 
     if (previewableFiles.length === 0) {
@@ -75,6 +80,8 @@ const AssetViewer = ({ file, selectedFiles }) => {
               <div className="grid-preview">
                 {isImageFile(f.name) ? (
                   <ImagePreview filePath={f.path} />
+                ) : isMaterialFile(f.name) ? (
+                  <MaterialPreview filePath={f.path} />
                 ) : (
                   <Model3D filePath={f.path} />
                 )}
@@ -129,6 +136,19 @@ const AssetViewer = ({ file, selectedFiles }) => {
     );
   }
 
+  if (isMaterialFile(file.name)) {
+    return (
+      <div className="asset-viewer">
+        <div className="viewer-content">
+          <MaterialPreview filePath={file.path} fullView />
+        </div>
+        <div className="viewer-info">
+          <span className="file-name">{file.name}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="asset-viewer">
       <div className="viewer-placeholder">
@@ -136,6 +156,171 @@ const AssetViewer = ({ file, selectedFiles }) => {
         <h3>Preview not available</h3>
         <p>File type: {file.name.split('.').pop().toUpperCase()}</p>
       </div>
+    </div>
+  );
+};
+
+// Component to handle Unity .mat material file preview
+const MaterialPreview = ({ filePath, fullView = false }) => {
+  const [materialData, setMaterialData] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const loadMaterial = async () => {
+      try {
+        const result = await window.electron.readFile(filePath);
+        if (result.success) {
+          // Decode base64 to text
+          const text = atob(result.data);
+          
+          // Parse Unity .mat file (YAML format)
+          const parsed = parseUnityMaterial(text);
+          setMaterialData(parsed);
+        } else {
+          setError('Failed to load material');
+        }
+      } catch (err) {
+        console.error('Error loading material:', err);
+        setError(err.message);
+      }
+    };
+    loadMaterial();
+  }, [filePath]);
+
+  // Parse Unity material YAML to extract color and properties
+  const parseUnityMaterial = (text) => {
+    const result = {
+      name: 'Unknown',
+      shader: 'Unknown',
+      color: { r: 0.5, g: 0.5, b: 0.5, a: 1 },
+      properties: {}
+    };
+
+    try {
+      // Extract material name
+      const nameMatch = text.match(/m_Name:\s*(.+)/i);
+      if (nameMatch) result.name = nameMatch[1].trim();
+
+      // Extract shader name
+      const shaderMatch = text.match(/m_Shader:.*?name:\s*(.+)/is) || text.match(/m_ShaderKeywords:\s*(.+)/i);
+      if (shaderMatch) result.shader = shaderMatch[1].trim();
+
+      // Extract main color (_Color property)
+      // Look for pattern like: _Color: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+      const colorMatch = text.match(/_Color:\s*\{\s*r:\s*([\d.]+),\s*g:\s*([\d.]+),\s*b:\s*([\d.]+),\s*a:\s*([\d.]+)\s*\}/i);
+      if (colorMatch) {
+        result.color = {
+          r: parseFloat(colorMatch[1]),
+          g: parseFloat(colorMatch[2]),
+          b: parseFloat(colorMatch[3]),
+          a: parseFloat(colorMatch[4])
+        };
+      }
+
+      // Also try to find BaseColor for newer shaders
+      const baseColorMatch = text.match(/_BaseColor:\s*\{\s*r:\s*([\d.]+),\s*g:\s*([\d.]+),\s*b:\s*([\d.]+),\s*a:\s*([\d.]+)\s*\}/i);
+      if (baseColorMatch && !colorMatch) {
+        result.color = {
+          r: parseFloat(baseColorMatch[1]),
+          g: parseFloat(baseColorMatch[2]),
+          b: parseFloat(baseColorMatch[3]),
+          a: parseFloat(baseColorMatch[4])
+        };
+      }
+
+      // Extract metallic
+      const metallicMatch = text.match(/_Metallic:\s*([\d.]+)/i) || text.match(/_MetallicScale:\s*([\d.]+)/i);
+      if (metallicMatch) result.properties.metallic = parseFloat(metallicMatch[1]);
+
+      // Extract smoothness/glossiness
+      const glossMatch = text.match(/_Glossiness:\s*([\d.]+)/i) || text.match(/_Smoothness:\s*([\d.]+)/i);
+      if (glossMatch) result.properties.smoothness = parseFloat(glossMatch[1]);
+
+      // Extract emission
+      const emissionMatch = text.match(/_EmissionColor:\s*\{\s*r:\s*([\d.]+),\s*g:\s*([\d.]+),\s*b:\s*([\d.]+)/i);
+      if (emissionMatch) {
+        result.properties.emission = {
+          r: parseFloat(emissionMatch[1]),
+          g: parseFloat(emissionMatch[2]),
+          b: parseFloat(emissionMatch[3])
+        };
+      }
+    } catch (e) {
+      console.error('Error parsing material:', e);
+    }
+
+    return result;
+  };
+
+  if (error) {
+    return (
+      <div className="material-preview error">
+        <span>⚠️ {error}</span>
+      </div>
+    );
+  }
+
+  if (!materialData) {
+    return (
+      <div className="material-preview loading">
+        <span>Loading...</span>
+      </div>
+    );
+  }
+
+  const { color, name, shader, properties } = materialData;
+  const rgbColor = `rgb(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)})`;
+  const hexColor = `#${Math.round(color.r * 255).toString(16).padStart(2, '0')}${Math.round(color.g * 255).toString(16).padStart(2, '0')}${Math.round(color.b * 255).toString(16).padStart(2, '0')}`;
+
+  if (fullView) {
+    return (
+      <div className="material-preview-full">
+        <div className="material-sphere" style={{ background: `radial-gradient(circle at 30% 30%, ${rgbColor}, #111)` }}>
+          <div className="material-highlight"></div>
+        </div>
+        <div className="material-info-panel">
+          <h3>{name}</h3>
+          <div className="material-detail">
+            <span className="label">Shader:</span>
+            <span className="value">{shader}</span>
+          </div>
+          <div className="material-detail">
+            <span className="label">Color:</span>
+            <div className="color-swatch" style={{ backgroundColor: rgbColor }}></div>
+            <span className="value">{hexColor}</span>
+          </div>
+          {properties.metallic !== undefined && (
+            <div className="material-detail">
+              <span className="label">Metallic:</span>
+              <span className="value">{(properties.metallic * 100).toFixed(0)}%</span>
+            </div>
+          )}
+          {properties.smoothness !== undefined && (
+            <div className="material-detail">
+              <span className="label">Smoothness:</span>
+              <span className="value">{(properties.smoothness * 100).toFixed(0)}%</span>
+            </div>
+          )}
+          {properties.emission && (
+            <div className="material-detail">
+              <span className="label">Emission:</span>
+              <div className="color-swatch" style={{ 
+                backgroundColor: `rgb(${Math.round(properties.emission.r * 255)}, ${Math.round(properties.emission.g * 255)}, ${Math.round(properties.emission.b * 255)})` 
+              }}></div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Grid view - compact
+  return (
+    <div className="material-preview-compact">
+      <div className="material-orb" style={{ background: `radial-gradient(circle at 30% 30%, ${rgbColor}, #222)` }}>
+        <div className="orb-highlight"></div>
+      </div>
+      <span className="material-name">{name}</span>
     </div>
   );
 };
