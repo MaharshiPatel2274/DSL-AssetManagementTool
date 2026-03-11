@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Folder, File, ChevronRight, ChevronDown, Search, RefreshCw, Star, Plus, Unlock, GitBranch } from 'lucide-react';
+import { Folder, File, ChevronRight, ChevronDown, Search, RefreshCw, Star, Plus, Unlock, GitBranch, Pin, X as XIcon } from 'lucide-react';
 import './FileExplorer.css';
 
 const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFolderChange }) => {
@@ -10,12 +10,8 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
   const [searchTerm, setSearchTerm] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('files');
-  const [favorites, setFavorites] = useState(() => {
-    try {
-      const saved = localStorage.getItem('assetTool_favorites');
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+  const [favorites, setFavorites] = useState([]);  // Array of { path, type, name, size?, lastModified? }
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false);
   const [p4Available, setP4Available] = useState(false);
   const [p4Working, setP4Working] = useState(false);
   const [p4Clients, setP4Clients] = useState([]);
@@ -38,6 +34,44 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
       }
     };
     checkP4();
+  }, []);
+
+  // Load favorites from file-based storage on mount
+  useEffect(() => {
+    const loadFavorites = async () => {
+      try {
+        if (window.electron?.favoritesLoad) {
+          const result = await window.electron.favoritesLoad();
+          if (result.success && Array.isArray(result.favorites)) {
+            // Validate each favorite still exists
+            const validFavs = [];
+            for (const fav of result.favorites) {
+              if (!fav || !fav.path) continue;
+              try {
+                const info = await window.electron.getPathInfo(fav.path);
+                if (info.success) {
+                  validFavs.push({
+                    path: fav.path,
+                    type: info.type,
+                    name: info.name,
+                    size: info.size,
+                    lastModified: info.lastModified,
+                  });
+                }
+              } catch {
+                // Path no longer exists, skip it
+              }
+            }
+            setFavorites(validFavs);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load favorites:', err);
+      } finally {
+        setFavoritesLoaded(true);
+      }
+    };
+    loadFavorites();
   }, []);
 
   // Refresh the file tree
@@ -126,16 +160,46 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
     onFileDoubleClick(file);
   };
 
-  // Favorites management
-  const toggleFavorite = (e, filePath) => {
+  // Save favorites to file-based storage
+  const saveFavorites = async (favs) => {
+    try {
+      if (window.electron?.favoritesSave) {
+        await window.electron.favoritesSave(favs);
+      }
+    } catch (err) {
+      console.error('Failed to save favorites:', err);
+    }
+  };
+
+  // Check if a path is favorited
+  const isFavorited = (itemPath) => favorites.some(f => f.path === itemPath);
+
+  // Toggle favorite for files or folders
+  const toggleFavorite = async (e, itemPath, itemType) => {
     e.stopPropagation();
-    setFavorites(prev => {
-      const newFavs = prev.includes(filePath)
-        ? prev.filter(f => f !== filePath)
-        : [...prev, filePath];
-      localStorage.setItem('assetTool_favorites', JSON.stringify(newFavs));
-      return newFavs;
-    });
+    const already = isFavorited(itemPath);
+    let newFavs;
+    if (already) {
+      newFavs = favorites.filter(f => f.path !== itemPath);
+    } else {
+      // Get info about the path
+      let info = { name: itemPath.split(/[\\/]/).pop(), type: itemType || 'file' };
+      try {
+        if (window.electron?.getPathInfo) {
+          const result = await window.electron.getPathInfo(itemPath);
+          if (result.success) info = result;
+        }
+      } catch { /* use defaults */ }
+      newFavs = [...favorites, {
+        path: itemPath,
+        type: info.type,
+        name: info.name,
+        size: info.size,
+        lastModified: info.lastModified,
+      }];
+    }
+    setFavorites(newFavs);
+    saveFavorites(newFavs);
   };
 
   // Select All / Deselect All
@@ -228,21 +292,6 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
     }
   };
 
-  // Get favorite file nodes from tree
-  const getFavoriteNodes = () => {
-    if (!fileTree) return [];
-    const favNodes = [];
-    const collectFavorites = (node) => {
-      if (node.type === 'file' && favorites.includes(node.path)) {
-        favNodes.push(node);
-      } else if (node.children) {
-        node.children.forEach(collectFavorites);
-      }
-    };
-    collectFavorites(fileTree);
-    return favNodes;
-  };
-
   useEffect(() => {
     if (fileTree) {
       const files = [];
@@ -317,7 +366,7 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
 
     if (node.type === 'file') {
       const isSelected = selectedFiles.has(node.path);
-      const isFavorite = favorites.includes(node.path);
+      const isFav = isFavorited(node.path);
       return (
         <div
           key={node.path}
@@ -339,11 +388,11 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
             </span>
           </div>
           <button
-            className={`favorite-btn ${isFavorite ? 'active' : ''}`}
-            onClick={(e) => toggleFavorite(e, node.path)}
-            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            className={`favorite-btn ${isFav ? 'active' : ''}`}
+            onClick={(e) => toggleFavorite(e, node.path, 'file')}
+            title={isFav ? 'Remove from favorites' : 'Add to favorites'}
           >
-            <Star size={14} fill={isFavorite ? '#f5a623' : 'none'} color={isFavorite ? '#f5a623' : '#999'} />
+            <Star size={14} fill={isFav ? '#f5a623' : 'none'} color={isFav ? '#f5a623' : '#999'} />
           </button>
         </div>
       );
@@ -351,6 +400,7 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
 
     if (node.type === 'directory') {
       const isExpanded = expandedFolders.has(node.path);
+      const isFav = isFavorited(node.path);
       return (
         <div key={node.path}>
           <div
@@ -361,6 +411,13 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
             {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
             <Folder size={16} color="#00ff88" />
             <span className="folder-name">{node.name}</span>
+            <button
+              className={`favorite-btn ${isFav ? 'active' : ''}`}
+              onClick={(e) => toggleFavorite(e, node.path, 'directory')}
+              title={isFav ? 'Unpin folder' : 'Pin folder'}
+            >
+              <Pin size={14} fill={isFav ? '#f5a623' : 'none'} color={isFav ? '#f5a623' : '#999'} />
+            </button>
           </div>
           {isExpanded && node.children && (
             <div className="folder-children">
@@ -378,34 +435,57 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
   const totalFileCount = getTotalFileCount();
   const isAllSelected = totalFileCount > 0 && selectedFiles.size === totalFileCount;
 
-  const renderFavoriteItem = (node) => {
-    const isSelected = selectedFiles.has(node.path);
+  const renderFavoriteItem = (fav) => {
+    const isFolder = fav.type === 'directory';
+    const isSelected = !isFolder && selectedFiles.has(fav.path);
     return (
       <div
-        key={node.path}
+        key={fav.path}
         className={`tree-item file-item ${isSelected ? 'selected' : ''}`}
         style={{ paddingLeft: '10px' }}
-        onDoubleClick={() => handleFileDoubleClick(node)}
+        onDoubleClick={() => {
+          if (isFolder) {
+            // Navigate to pinned folder
+            setRootPath(fav.path);
+            if (onFolderChange) onFolderChange(fav.path);
+            window.electron.readDirectoryTree(fav.path).then(tree => {
+              setFileTree(tree);
+              setExpandedFolders(new Set([fav.path]));
+              setSelectedFiles(new Set());
+              setActiveTab('files');
+            });
+          } else {
+            handleFileDoubleClick(fav);
+          }
+        }}
       >
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={() => toggleFileSelection(node)}
-          onClick={(e) => e.stopPropagation()}
-        />
-        <span className="file-icon">{getFileIcon(node.name)}</span>
+        {isFolder ? (
+          <Folder size={16} color="#00ff88" />
+        ) : (
+          <>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => toggleFileSelection(fav)}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <span className="file-icon">{getFileIcon(fav.name)}</span>
+          </>
+        )}
         <div className="file-info">
-          <span className="file-name">{node.name}</span>
+          <span className="file-name">{fav.name}</span>
           <span className="file-meta">
-            {formatFileSize(node.size)} • {new Date(node.lastModified).toLocaleDateString()}
+            {isFolder ? 'Pinned folder — double-click to open' : (
+              `${fav.size ? formatFileSize(fav.size) : ''} ${fav.lastModified ? '• ' + new Date(fav.lastModified).toLocaleDateString() : ''}`
+            )}
           </span>
         </div>
         <button
           className="favorite-btn active"
-          onClick={(e) => toggleFavorite(e, node.path)}
-          title="Remove from favorites"
+          onClick={(e) => toggleFavorite(e, fav.path, fav.type)}
+          title={isFolder ? 'Unpin folder' : 'Remove from favorites'}
         >
-          <Star size={14} fill="#f5a623" color="#f5a623" />
+          {isFolder ? <Pin size={14} fill="#f5a623" color="#f5a623" /> : <Star size={14} fill="#f5a623" color="#f5a623" />}
         </button>
       </div>
     );
@@ -524,15 +604,15 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
             </div>
           )
         ) : (
-          getFavoriteNodes().length > 0 ? (
+          favorites.length > 0 ? (
             <div className="favorites-list">
-              {getFavoriteNodes().map(node => renderFavoriteItem(node))}
+              {favorites.map(fav => renderFavoriteItem(fav))}
             </div>
           ) : (
             <div className="empty-state">
               <Star size={48} color="#cccccc" />
               <p>No favorites yet</p>
-              <p className="empty-hint">Click the ★ icon next to files to add them</p>
+              <p className="empty-hint">Click ★ on files or 📌 on folders to pin them</p>
             </div>
           )
         )}

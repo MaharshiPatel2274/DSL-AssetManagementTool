@@ -1134,3 +1134,50 @@ ipcMain.handle('p4-add-files', async (event, data) => {
   }
   return results;
 });
+
+// ── Favorites storage (per OS user, file-based) ───────────────────────────
+
+function getFavoritesFilePath() {
+  const userDataPath = app.getPath('userData');
+  return path.join(userDataPath, 'favorites.json');
+}
+
+ipcMain.handle('favorites-load', async () => {
+  try {
+    const filePath = getFavoritesFilePath();
+    const data = await fs.readFile(filePath, 'utf-8');
+    const parsed = JSON.parse(data);
+    return { success: true, favorites: Array.isArray(parsed) ? parsed : [] };
+  } catch (error) {
+    // File doesn't exist yet or corrupt — return empty
+    return { success: true, favorites: [] };
+  }
+});
+
+ipcMain.handle('favorites-save', async (event, favorites) => {
+  try {
+    const filePath = getFavoritesFilePath();
+    await fs.writeFile(filePath, JSON.stringify(favorites, null, 2), 'utf-8');
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to save favorites:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get info about a path (file or folder) for favorites display
+ipcMain.handle('get-path-info', async (event, targetPath) => {
+  try {
+    const stats = await fs.stat(targetPath);
+    return {
+      success: true,
+      name: path.basename(targetPath),
+      path: targetPath,
+      type: stats.isDirectory() ? 'directory' : 'file',
+      size: stats.size,
+      lastModified: stats.mtime.toISOString(),
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
