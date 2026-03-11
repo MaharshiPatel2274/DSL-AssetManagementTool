@@ -25,9 +25,9 @@ contextBridge.exposeInMainWorld('electron', {
   p4CheckFileStatus: (filePath) => ipcRenderer.invoke('p4-check-file-status', filePath),
   p4Fstat: (filePath) => ipcRenderer.invoke('p4-fstat', filePath),
   p4CheckoutFile: (filePath) => ipcRenderer.invoke('p4-checkout-file', filePath),
-  p4CheckoutFiles: (filePaths) => ipcRenderer.invoke('p4-checkout-files', filePaths),
+  p4CheckoutFiles: (data) => ipcRenderer.invoke('p4-checkout-files', data),
   p4RevertFile: (filePath) => ipcRenderer.invoke('p4-revert-file', filePath),
-  p4AddFile: (filePath) => ipcRenderer.invoke('p4-add-file', filePath),
+  p4AddFile: (data) => ipcRenderer.invoke('p4-add-file', data),
   
   // Workspace operations
   p4GetOpened: (clientName) => ipcRenderer.invoke('p4-get-opened', clientName),
@@ -40,4 +40,13 @@ contextBridge.exposeInMainWorld('electron', {
   p4GetPendingChanges: (options) => ipcRenderer.invoke('p4-get-pending-changes', options),
   p4DescribeChange: (changeNumber) => ipcRenderer.invoke('p4-describe-change', changeNumber),
   p4Filelog: (filePath) => ipcRenderer.invoke('p4-filelog', filePath),
+  
+  // Streams and depot browsing
+  p4GetStreams: () => ipcRenderer.invoke('p4-get-streams'),
+  p4GetDepots: () => ipcRenderer.invoke('p4-get-depots'),
+  p4GetDepotDirs: (path) => ipcRenderer.invoke('p4-get-depot-dirs', path),
+  p4GetDepotFiles: (path) => ipcRenderer.invoke('p4-get-depot-files', path),
+  
+  // Bulk operations
+  p4AddFiles: (data) => ipcRenderer.invoke('p4-add-files', data),
 });

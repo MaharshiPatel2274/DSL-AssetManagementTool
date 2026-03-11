@@ -5,6 +5,37 @@ import MetadataPanel from './components/MetadataPanel';
 import P4Panel from './components/P4Panel';
 import './App.css';
 
+// Error boundary to prevent blank page crashes
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('App crash caught by ErrorBoundary:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, textAlign: 'center', color: '#333' }}>
+          <h2>Something went wrong</h2>
+          <p style={{ color: '#666' }}>{this.state.error?.message}</p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{ marginTop: 20, padding: '10px 20px', background: '#3D8B1F', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+          >
+            Reload App
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function App() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [previewFile, setPreviewFile] = useState(null);
@@ -12,6 +43,7 @@ function App() {
   const [leftWidth, setLeftWidth] = useState(300);
   const [rightWidth, setRightWidth] = useState(350);
   const [showP4Panel, setShowP4Panel] = useState(false);
+  const [currentFolder, setCurrentFolder] = useState(null);
   const isDraggingLeft = useRef(false);
   const isDraggingRight = useRef(false);
 
@@ -114,6 +146,7 @@ function App() {
   }, []);
 
   return (
+    <ErrorBoundary>
     <div className="app">
       <header className="app-header">
         <h1>Asset Metadata Tool</h1>
@@ -130,6 +163,8 @@ function App() {
           <FileExplorer 
             onSelectionChange={setSelectedFiles}
             onFileDoubleClick={setPreviewFile}
+            fileMetadata={fileMetadata}
+            onFolderChange={setCurrentFolder}
           />
         </div>
         
@@ -165,8 +200,10 @@ function App() {
       <P4Panel 
         isOpen={showP4Panel}
         onClose={() => setShowP4Panel(false)}
+        currentFolder={currentFolder}
       />
     </div>
+    </ErrorBoundary>
   );
 }
 

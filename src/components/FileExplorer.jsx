@@ -1,15 +1,44 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Folder, File, ChevronRight, ChevronDown, Search, RefreshCw } from 'lucide-react';
+import { Folder, File, ChevronRight, ChevronDown, Search, RefreshCw, Star, Plus, Unlock, GitBranch } from 'lucide-react';
 import './FileExplorer.css';
 
-const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
+const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFolderChange }) => {
   const [rootPath, setRootPath] = useState(null);
   const [fileTree, setFileTree] = useState(null);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [selectedFiles, setSelectedFiles] = useState(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState('files');
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const saved = localStorage.getItem('assetTool_favorites');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [p4Available, setP4Available] = useState(false);
+  const [p4Working, setP4Working] = useState(false);
+  const [p4Clients, setP4Clients] = useState([]);
+  const [selectedP4Client, setSelectedP4Client] = useState('');
   const cleanupRef = useRef(null);
+
+  // Check P4 availability and load workspaces
+  useEffect(() => {
+    const checkP4 = async () => {
+      if (window.electron?.p4CheckAvailable) {
+        const result = await window.electron.p4CheckAvailable();
+        setP4Available(result.available);
+        if (result.available && window.electron.p4GetInfo) {
+          const info = await window.electron.p4GetInfo();
+          if (info.success && info.clients) {
+            setP4Clients(info.clients);
+            if (info.client) setSelectedP4Client(info.client);
+          }
+        }
+      }
+    };
+    checkP4();
+  }, []);
 
   // Refresh the file tree
   const refreshFileTree = useCallback(async () => {
@@ -62,6 +91,7 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
     const path = await window.electron.selectFolder();
     if (path) {
       setRootPath(path);
+      if (onFolderChange) onFolderChange(path);
       const tree = await window.electron.readDirectoryTree(path);
       setFileTree(tree);
       setExpandedFolders(new Set([path]));
@@ -94,6 +124,123 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
 
   const handleFileDoubleClick = (file) => {
     onFileDoubleClick(file);
+  };
+
+  // Favorites management
+  const toggleFavorite = (e, filePath) => {
+    e.stopPropagation();
+    setFavorites(prev => {
+      const newFavs = prev.includes(filePath)
+        ? prev.filter(f => f !== filePath)
+        : [...prev, filePath];
+      localStorage.setItem('assetTool_favorites', JSON.stringify(newFavs));
+      return newFavs;
+    });
+  };
+
+  // Select All / Deselect All
+  const handleSelectAll = () => {
+    if (!fileTree) return;
+    const allPaths = new Set();
+    const tree = (searchTerm && fileTree) ? filterTree(fileTree, searchTerm) : fileTree;
+    if (!tree) return;
+    const collectAll = (node) => {
+      if (node.type === 'file') allPaths.add(node.path);
+      else if (node.children) node.children.forEach(collectAll);
+    };
+    collectAll(tree);
+    if (selectedFiles.size > 0 && selectedFiles.size === allPaths.size) {
+      setSelectedFiles(new Set());
+    } else {
+      setSelectedFiles(allPaths);
+    }
+  };
+
+  // Get total file count for Select All state
+  const getTotalFileCount = () => {
+    if (!fileTree) return 0;
+    let count = 0;
+    const tree = (searchTerm && fileTree) ? filterTree(fileTree, searchTerm) : fileTree;
+    if (!tree) return 0;
+    const countFiles = (node) => {
+      if (node.type === 'file') count++;
+      else if (node.children) node.children.forEach(countFiles);
+    };
+    countFiles(tree);
+    return count;
+  };
+
+  // P4 bulk add selected files (uses selected workspace)
+  const handleP4AddSelected = async () => {
+    if (selectedFiles.size === 0 || p4Working) return;
+    if (!selectedP4Client) {
+      alert('Please select a P4 workspace first from the dropdown below.');
+      return;
+    }
+    setP4Working(true);
+    try {
+      const paths = Array.from(selectedFiles);
+      const results = await window.electron.p4AddFiles({ filePaths: paths, client: selectedP4Client });
+      const successes = results.filter(r => r.success).length;
+      const failures = results.length - successes;
+      if (successes > 0 && failures === 0) {
+        alert(`Successfully added ${successes} file(s) to Perforce (workspace: ${selectedP4Client})`);
+      } else if (successes > 0) {
+        const firstErr = results.find(r => !r.success);
+        alert(`Added ${successes} file(s), ${failures} failed.\nFirst error: ${firstErr?.error || 'Unknown'}`);
+      } else {
+        const firstErr = results[0];
+        alert(`Failed to add files to Perforce.\nWorkspace: ${selectedP4Client}\nError: ${firstErr?.error || 'Files are not under this workspace root. Select the correct workspace.'}`);
+      }
+    } catch (err) {
+      alert('P4 Add failed: ' + err.message);
+    } finally {
+      setP4Working(false);
+    }
+  };
+
+  // P4 bulk checkout selected files (uses selected workspace)
+  const handleP4CheckoutSelected = async () => {
+    if (selectedFiles.size === 0 || p4Working) return;
+    if (!selectedP4Client) {
+      alert('Please select a P4 workspace first from the dropdown below.');
+      return;
+    }
+    setP4Working(true);
+    try {
+      const paths = Array.from(selectedFiles);
+      const results = await window.electron.p4CheckoutFiles({ filePaths: paths, client: selectedP4Client });
+      const successes = results.filter(r => r.success).length;
+      const failures = results.length - successes;
+      if (successes > 0 && failures === 0) {
+        alert(`Successfully checked out ${successes} file(s) (workspace: ${selectedP4Client})`);
+      } else if (successes > 0) {
+        const firstErr = results.find(r => !r.success);
+        alert(`Checked out ${successes} file(s), ${failures} failed.\nFirst error: ${firstErr?.error || 'Unknown'}`);
+      } else {
+        const firstErr = results[0];
+        alert(`Failed to checkout files.\nWorkspace: ${selectedP4Client}\nError: ${firstErr?.error || 'Files are not in depot under this workspace. Select the correct workspace.'}`);
+      }
+    } catch (err) {
+      alert('P4 Checkout failed: ' + err.message);
+    } finally {
+      setP4Working(false);
+    }
+  };
+
+  // Get favorite file nodes from tree
+  const getFavoriteNodes = () => {
+    if (!fileTree) return [];
+    const favNodes = [];
+    const collectFavorites = (node) => {
+      if (node.type === 'file' && favorites.includes(node.path)) {
+        favNodes.push(node);
+      } else if (node.children) {
+        node.children.forEach(collectFavorites);
+      }
+    };
+    collectFavorites(fileTree);
+    return favNodes;
   };
 
   useEffect(() => {
@@ -133,21 +280,35 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
 
   const filterTree = (node, search) => {
     if (!search) return node;
-    
+    const term = search.toLowerCase();
+
     if (node.type === 'file') {
-      return node.name.toLowerCase().includes(search.toLowerCase()) ? node : null;
+      // Search file name
+      if (node.name.toLowerCase().includes(term)) return node;
+      // Search metadata (tags, title, author, notes, custom fields)
+      const meta = fileMetadata?.[node.path];
+      if (meta) {
+        if (meta.title && meta.title.toLowerCase().includes(term)) return node;
+        if (meta.author && meta.author.toLowerCase().includes(term)) return node;
+        if (meta.notes && meta.notes.toLowerCase().includes(term)) return node;
+        if (Array.isArray(meta.tags) && meta.tags.some(t => t.toLowerCase().includes(term))) return node;
+        for (const [key, value] of Object.entries(meta)) {
+          if (typeof value === 'string' && value.toLowerCase().includes(term)) return node;
+        }
+      }
+      return null;
     }
-    
+
     if (node.type === 'directory') {
       const filteredChildren = node.children
         .map(child => filterTree(child, search))
         .filter(child => child !== null);
-      
-      if (filteredChildren.length > 0 || node.name.toLowerCase().includes(search.toLowerCase())) {
+
+      if (filteredChildren.length > 0 || node.name.toLowerCase().includes(term)) {
         return { ...node, children: filteredChildren };
       }
     }
-    
+
     return null;
   };
 
@@ -156,6 +317,7 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
 
     if (node.type === 'file') {
       const isSelected = selectedFiles.has(node.path);
+      const isFavorite = favorites.includes(node.path);
       return (
         <div
           key={node.path}
@@ -176,6 +338,13 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
               {formatFileSize(node.size)} • {new Date(node.lastModified).toLocaleDateString()}
             </span>
           </div>
+          <button
+            className={`favorite-btn ${isFavorite ? 'active' : ''}`}
+            onClick={(e) => toggleFavorite(e, node.path)}
+            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <Star size={14} fill={isFavorite ? '#f5a623' : 'none'} color={isFavorite ? '#f5a623' : '#999'} />
+          </button>
         </div>
       );
     }
@@ -206,6 +375,41 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
   };
 
   const displayTree = searchTerm && fileTree ? filterTree(fileTree, searchTerm) : fileTree;
+  const totalFileCount = getTotalFileCount();
+  const isAllSelected = totalFileCount > 0 && selectedFiles.size === totalFileCount;
+
+  const renderFavoriteItem = (node) => {
+    const isSelected = selectedFiles.has(node.path);
+    return (
+      <div
+        key={node.path}
+        className={`tree-item file-item ${isSelected ? 'selected' : ''}`}
+        style={{ paddingLeft: '10px' }}
+        onDoubleClick={() => handleFileDoubleClick(node)}
+      >
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => toggleFileSelection(node)}
+          onClick={(e) => e.stopPropagation()}
+        />
+        <span className="file-icon">{getFileIcon(node.name)}</span>
+        <div className="file-info">
+          <span className="file-name">{node.name}</span>
+          <span className="file-meta">
+            {formatFileSize(node.size)} • {new Date(node.lastModified).toLocaleDateString()}
+          </span>
+        </div>
+        <button
+          className="favorite-btn active"
+          onClick={(e) => toggleFavorite(e, node.path)}
+          title="Remove from favorites"
+        >
+          <Star size={14} fill="#f5a623" color="#f5a623" />
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="file-explorer">
@@ -232,28 +436,111 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick }) => {
         </div>
       )}
 
+      {/* Tabs: Files / Favorites */}
+      <div className="explorer-tabs">
+        <button
+          className={`explorer-tab ${activeTab === 'files' ? 'active' : ''}`}
+          onClick={() => setActiveTab('files')}
+        >
+          FILES
+        </button>
+        <button
+          className={`explorer-tab ${activeTab === 'favorites' ? 'active' : ''}`}
+          onClick={() => setActiveTab('favorites')}
+        >
+          ★ FAVORITES ({favorites.length})
+        </button>
+      </div>
+
       <div className="search-box">
         <Search size={16} />
         <input
           type="text"
-          placeholder="Search files..."
+          placeholder="Search files & tags..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
 
+      {/* Toolbar: Select All + P4 Actions */}
+      {rootPath && activeTab === 'files' && (
+        <div className="explorer-toolbar">
+          <label className="select-all-label">
+            <input
+              type="checkbox"
+              checked={isAllSelected}
+              onChange={handleSelectAll}
+            />
+            Select All ({totalFileCount})
+          </label>
+          {p4Available && (
+            <div className="explorer-p4-section">
+              <div className="explorer-p4-workspace">
+                <GitBranch size={12} />
+                <select
+                  className="p4-workspace-select"
+                  value={selectedP4Client}
+                  onChange={(e) => setSelectedP4Client(e.target.value)}
+                  title="Select P4 workspace for add/checkout"
+                >
+                  <option value="">Select Workspace...</option>
+                  {p4Clients.map(c => (
+                    <option key={c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="explorer-p4-actions">
+                <button
+                  className="p4-action-btn add"
+                  onClick={handleP4AddSelected}
+                  disabled={selectedFiles.size === 0 || p4Working || !selectedP4Client}
+                  title="Add selected files to Perforce"
+                >
+                  <Plus size={12} />
+                  <span>Add to P4</span>
+                </button>
+                <button
+                  className="p4-action-btn checkout"
+                  onClick={handleP4CheckoutSelected}
+                  disabled={selectedFiles.size === 0 || p4Working || !selectedP4Client}
+                  title="Checkout selected files from Perforce"
+                >
+                  <Unlock size={12} />
+                  <span>Checkout</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="tree-view">
-        {displayTree ? renderTreeNode(displayTree) : (
-          <div className="empty-state">
-            <Folder size={48} color="#cccccc" />
-            <p>No folder selected</p>
-            <p className="empty-hint">Click "Browse Folder" to start</p>
-          </div>
+        {activeTab === 'files' ? (
+          displayTree ? renderTreeNode(displayTree) : (
+            <div className="empty-state">
+              <Folder size={48} color="#cccccc" />
+              <p>No folder selected</p>
+              <p className="empty-hint">Click "Browse Folder" to start</p>
+            </div>
+          )
+        ) : (
+          getFavoriteNodes().length > 0 ? (
+            <div className="favorites-list">
+              {getFavoriteNodes().map(node => renderFavoriteItem(node))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <Star size={48} color="#cccccc" />
+              <p>No favorites yet</p>
+              <p className="empty-hint">Click the ★ icon next to files to add them</p>
+            </div>
+          )
         )}
       </div>
 
       <div className="file-count-footer">
         {selectedFiles.size} files selected
+        {p4Working && <span className="p4-working-indicator"> • P4 working...</span>}
       </div>
     </div>
   );

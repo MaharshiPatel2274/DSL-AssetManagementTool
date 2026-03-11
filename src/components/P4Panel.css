@@ -114,17 +114,20 @@
 .p4-panel-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
 }
 
 .p4-section {
   background: #f5f5f5;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
+  flex-shrink: 0;
 }
 
 .p4-section-header {
@@ -147,6 +150,8 @@
 
 .p4-section-content {
   padding: 12px 14px;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 .p4-info-row {
@@ -422,7 +427,7 @@
   border: 2px solid #3D8B1F;
   border-radius: 8px;
   padding: 16px;
-  margin-top: auto;
+  flex-shrink: 0;
 }
 
 .p4-submit-section h4 {
@@ -491,4 +496,143 @@
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+/* Load/Action Buttons */
+.p4-load-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Streams List */
+.p4-streams-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.p4-stream-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 12px;
+  color: #333;
+}
+
+.p4-stream-item:hover {
+  background: rgba(61, 139, 31, 0.08);
+}
+
+.p4-stream-item.active {
+  background: rgba(61, 139, 31, 0.15);
+  border: 1px solid rgba(61, 139, 31, 0.3);
+}
+
+.p4-stream-item svg {
+  color: #3D8B1F;
+  flex-shrink: 0;
+}
+
+.stream-name {
+  flex: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stream-type {
+  font-size: 10px;
+  color: #999;
+  padding: 2px 6px;
+  background: #f0f0f0;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* Depot Browser */
+.p4-depot-browser {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.p4-depot-tree {
+  display: flex;
+  flex-direction: column;
+}
+
+.depot-dir-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #333;
+  transition: background 0.2s;
+}
+
+.depot-dir-item:hover {
+  background: rgba(61, 139, 31, 0.08);
+}
+
+.depot-dir-item svg {
+  flex-shrink: 0;
+}
+
+.depot-root {
+  font-weight: 600;
+}
+
+.depot-name {
+  flex: 1;
+}
+
+.depot-type {
+  font-size: 10px;
+  color: #999;
+  padding: 2px 6px;
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.depot-file-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #666;
+}
+
+.depot-file-item svg {
+  color: #999;
+  flex-shrink: 0;
+}
+
+.depot-file-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.depot-file-rev {
+  font-size: 10px;
+  color: #999;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.depot-loading {
+  text-align: center;
+  padding: 8px;
+  font-size: 12px;
+  color: #999;
 }

@@ -538,12 +538,15 @@ ipcMain.handle('p4-checkout-file', async (event, filePath) => {
   }
 });
 
-ipcMain.handle('p4-checkout-files', async (event, filePaths) => {
+ipcMain.handle('p4-checkout-files', async (event, data) => {
+  // Support both old format (array of paths) and new format ({ filePaths, client })
+  const filePaths = Array.isArray(data) ? data : data.filePaths;
+  const clientOverride = Array.isArray(data) ? null : data.client;
   const results = [];
   
   for (const filePath of filePaths) {
     try {
-      const client = findClientForPath(filePath);
+      const client = clientOverride || findClientForPath(filePath);
       const { stdout, stderr } = await runP4Command(`edit "${filePath}"`, client);
       const output = stdout + stderr;
       
@@ -552,6 +555,12 @@ ipcMain.handle('p4-checkout-files', async (event, filePaths) => {
           file: filePath,
           success: true,
           message: 'Checked out',
+        });
+      } else if (output.includes('not on client') || output.includes('not under client') || output.includes('not in client view')) {
+        results.push({
+          file: filePath,
+          success: false,
+          error: `File is not under workspace "${client}" root. Select a workspace whose root covers this file.`,
         });
       } else {
         results.push({
@@ -582,9 +591,12 @@ ipcMain.handle('p4-revert-file', async (event, filePath) => {
   }
 });
 
-ipcMain.handle('p4-add-file', async (event, filePath) => {
+ipcMain.handle('p4-add-file', async (event, data) => {
+  // Support both old format (string path) and new format ({ filePath, client })
+  const filePath = typeof data === 'string' ? data : data.filePath;
+  const clientOverride = typeof data === 'string' ? null : data.client;
   try {
-    const client = findClientForPath(filePath);
+    const client = clientOverride || findClientForPath(filePath);
     console.log(`Adding file to P4 with client "${client}":`, filePath);
     const { stdout, stderr } = await runP4Command(`add "${filePath}"`, client);
     const output = stdout + stderr;
@@ -593,19 +605,18 @@ ipcMain.handle('p4-add-file', async (event, filePath) => {
       return { success: true, message: 'File marked for add' };
     }
     
-    // Better error messages
     if (output.includes('not on client') || output.includes('not under client')) {
-      return { success: false, error: 'File is outside your P4 workspace. Check workspace mapping.' };
+      return { success: false, error: `File is outside workspace "${client}". The file must be under the workspace root folder.` };
     }
     if (output.includes('file(s) not in client view')) {
-      return { success: false, error: 'File path not mapped in workspace View. Update your P4 workspace.' };
+      return { success: false, error: `File path not mapped in workspace "${client}" view. Select a different workspace or update your workspace mapping.` };
     }
     
     return { success: false, error: output || 'Failed to add file' };
   } catch (error) {
     const errMsg = error.message || error.stderr || 'Unknown error';
     if (errMsg.includes('not on client') || errMsg.includes('not under client') || errMsg.includes('not in client view')) {
-      return { success: false, error: 'File is outside your P4 workspace mapping.' };
+      return { success: false, error: 'File is outside the selected P4 workspace. Select a workspace whose root covers this file location.' };
     }
     return { success: false, error: errMsg };
   }
@@ -1005,4 +1016,121 @@ ipcMain.handle('p4-set-client', async (event, clientName) => {
   } catch (error) {
     return { success: false, error: error.message };
   }
+});
+
+// Get available P4 streams
+ipcMain.handle('p4-get-streams', async () => {
+  try {
+    const { stdout, stderr } = await runP4Command('streams', p4Config.client);
+    const output = stdout || '';
+    const streams = [];
+    const lines = output.split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      // Format: Stream //depot/stream type owner date 'description'
+      const match = line.match(/^Stream\s+(\S+)\s+(\S+)\s+/);
+      if (match) {
+        streams.push({
+          stream: match[1],
+          type: match[2],
+          name: match[1].split('/').filter(Boolean).pop(),
+        });
+      }
+    }
+    return { success: true, streams };
+  } catch (error) {
+    return { success: false, error: error.message, streams: [] };
+  }
+});
+
+// Get P4 depots
+ipcMain.handle('p4-get-depots', async () => {
+  try {
+    const { stdout } = await runP4Command('depots', p4Config.client);
+    const depots = [];
+    const lines = stdout.split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      const match = line.match(/^Depot\s+(\S+)\s+\S+\s+(\S+)/);
+      if (match) {
+        depots.push({
+          name: match[1],
+          type: match[2],
+        });
+      }
+    }
+    return { success: true, depots };
+  } catch (error) {
+    return { success: false, error: error.message, depots: [] };
+  }
+});
+
+// Browse depot directories
+ipcMain.handle('p4-get-depot-dirs', async (event, depotPath) => {
+  try {
+    const searchPath = depotPath.endsWith('/') ? depotPath + '*' : depotPath + '/*';
+    const { stdout } = await runP4Command(`dirs "${searchPath}"`, p4Config.client);
+    const dirs = stdout.split('\n').filter(l => l.trim()).map(d => d.trim());
+    return { success: true, dirs };
+  } catch (error) {
+    if (error.message?.includes('no such file') || error.message?.includes('must refer to client')) {
+      return { success: true, dirs: [] };
+    }
+    return { success: false, error: error.message, dirs: [] };
+  }
+});
+
+// Browse depot files
+ipcMain.handle('p4-get-depot-files', async (event, depotPath) => {
+  try {
+    const searchPath = depotPath.endsWith('/') ? depotPath + '*' : depotPath + '/*';
+    const { stdout } = await runP4Command(`files "${searchPath}"`, p4Config.client);
+    const files = [];
+    const lines = stdout.split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      const match = line.match(/^(.+)#(\d+)\s+-\s+(\w+)/);
+      if (match) {
+        files.push({
+          depotFile: match[1],
+          revision: parseInt(match[2]),
+          action: match[3],
+          name: match[1].split('/').pop(),
+        });
+      }
+    }
+    return { success: true, files };
+  } catch (error) {
+    if (error.message?.includes('no such file') || error.message?.includes('must refer to client')) {
+      return { success: true, files: [] };
+    }
+    return { success: false, error: error.message, files: [] };
+  }
+});
+
+// Bulk add files to P4
+ipcMain.handle('p4-add-files', async (event, data) => {
+  // Support both old format (array of paths) and new format ({ filePaths, client })
+  const filePaths = Array.isArray(data) ? data : data.filePaths;
+  const clientOverride = Array.isArray(data) ? null : data.client;
+  const results = [];
+  for (const filePath of filePaths) {
+    try {
+      const client = clientOverride || findClientForPath(filePath);
+      const { stdout, stderr } = await runP4Command(`add "${filePath}"`, client);
+      const output = stdout + stderr;
+      if (output.includes('opened for add') || output.includes('currently opened')) {
+        results.push({ file: filePath, success: true });
+      } else if (output.includes('not on client') || output.includes('not under client') || output.includes('not in client view')) {
+        results.push({ file: filePath, success: false, error: `File is not under workspace "${client}" root. Select a workspace whose root covers this file's location.` });
+      } else {
+        results.push({ file: filePath, success: false, error: output.trim() || 'Failed to add file' });
+      }
+    } catch (error) {
+      const errMsg = error.message || '';
+      if (errMsg.includes('not on client') || errMsg.includes('not under client') || errMsg.includes('not in client view')) {
+        results.push({ file: filePath, success: false, error: `File is not under the selected workspace root. Select a workspace whose root covers this file's location.` });
+      } else {
+        results.push({ file: filePath, success: false, error: errMsg });
+      }
+    }
+  }
+  return results;
 });

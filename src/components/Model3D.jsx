@@ -1,5 +1,5 @@
-import React, { Suspense, useEffect, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import React, { Suspense, useEffect, useState, useRef } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
@@ -8,9 +8,10 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 
 const Model3D = ({ filePath }) => {
   const [error, setError] = useState(null);
+  const controlsRef = useRef();
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       {error ? (
         <div style={{ 
           display: 'flex', 
@@ -26,14 +27,17 @@ const Model3D = ({ filePath }) => {
           <div style={{ fontSize: '12px', color: '#999' }}>{error}</div>
         </div>
       ) : (
+        <>
         <Canvas gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }}>
           <PerspectiveCamera makeDefault position={[5, 5, 5]} />
           <OrbitControls 
+            ref={controlsRef}
             enableDamping
             dampingFactor={0.05}
             rotateSpeed={0.5}
             zoomSpeed={0.8}
           />
+          <FocusHandler controlsRef={controlsRef} />
           
           {/* Strong ambient light for base illumination */}
           <ambientLight intensity={1.5} />
@@ -64,9 +68,39 @@ const Model3D = ({ filePath }) => {
           <gridHelper args={[10, 10, '#444444', '#222222']} />
           <Environment preset="studio" background={false} />
         </Canvas>
+        <div style={{
+          position: 'absolute', bottom: 8, right: 8,
+          fontSize: '11px', color: 'rgba(255,255,255,0.4)',
+          background: 'rgba(0,0,0,0.3)', padding: '4px 8px',
+          borderRadius: '4px', pointerEvents: 'none'
+        }}>Press F to focus</div>
+        </>
       )}
     </div>
   );
+};
+
+const FocusHandler = ({ controlsRef }) => {
+  const { camera } = useThree();
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      if (e.key === 'f' || e.key === 'F') {
+        camera.position.set(5, 5, 5);
+        camera.lookAt(0, 0, 0);
+        camera.updateProjectionMatrix();
+        if (controlsRef.current) {
+          controlsRef.current.target.set(0, 0, 0);
+          controlsRef.current.update();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [camera, controlsRef]);
+
+  return null;
 };
 
 const Loader = () => {

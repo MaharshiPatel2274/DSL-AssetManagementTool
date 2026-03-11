@@ -19,6 +19,8 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate,
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [showP4Details, setShowP4Details] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [p4Clients, setP4Clients] = useState([]);
+  const [selectedP4Client, setSelectedP4Client] = useState('');
   const connectionCheckInterval = useRef(null);
 
   // Check if P4 is available and get info
@@ -33,6 +35,10 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate,
           if (info.success) {
             setP4Info(info);
             setP4Connected(info.connected || false);
+            if (info.clients && info.clients.length > 0) {
+              setP4Clients(info.clients);
+              setSelectedP4Client(info.client || info.clients[0].name);
+            }
           }
         }
       }
@@ -204,7 +210,7 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate,
     const filesToCheckout = selectedFiles.map(f => f.path);
     
     try {
-      const results = await window.electron.p4CheckoutFiles(filesToCheckout);
+      const results = await window.electron.p4CheckoutFiles({ filePaths: filesToCheckout, client: selectedP4Client || null });
       const successCount = results.filter(r => r.success).length;
       const failCount = results.length - successCount;
       
@@ -243,7 +249,7 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate,
       let failCount = 0;
       
       for (const file of selectedFiles) {
-        const result = await window.electron.p4AddFile(file.path);
+        const result = await window.electron.p4AddFile({ filePath: file.path, client: selectedP4Client || null });
         if (result.success) {
           successCount++;
         } else {
@@ -255,7 +261,7 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate,
         console.log(`P4: ${successCount} file(s) marked for add`);
       }
       if (failCount > 0) {
-        alert(`P4 Add: ${successCount} added, ${failCount} failed`);
+        alert(`P4 Add: ${successCount} added, ${failCount} failed.\nWorkspace: ${selectedP4Client || 'default'}\nMake sure files are under the workspace root folder.`);
       }
       
       // Refresh status
@@ -380,7 +386,20 @@ const MetadataPanel = ({ selectedFiles, currentFile, metadata, onMetadataUpdate,
                 <div className="p4-detail-row">
                   <FolderGit size={14} />
                   <span className="p4-label">Workspace:</span>
-                  <span className="p4-value">{p4Info.client}</span>
+                  {p4Clients.length > 1 ? (
+                    <select
+                      className="p4-workspace-dropdown"
+                      value={selectedP4Client}
+                      onChange={(e) => setSelectedP4Client(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {p4Clients.map(c => (
+                        <option key={c.name} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="p4-value">{selectedP4Client || p4Info.client}</span>
+                  )}
                 </div>
                 <div className="p4-detail-row">
                   <Server size={14} />
