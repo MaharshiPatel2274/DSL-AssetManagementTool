@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld('electron', {
   // Bulk operations
   p4AddFiles: (data) => ipcRenderer.invoke('p4-add-files', data),
 
+  // P4 search files
+  p4SearchFiles: (options) => ipcRenderer.invoke('p4-search-files', options),
+
   // Favorites (file-based, per-user)
   favoritesLoad: () => ipcRenderer.invoke('favorites-load'),
   favoritesSave: (favorites) => ipcRenderer.invoke('favorites-save', favorites),

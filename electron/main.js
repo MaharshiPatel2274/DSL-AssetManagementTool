@@ -1137,6 +1137,57 @@ ipcMain.handle('p4-add-files', async (event, data) => {
 
 // ── Favorites storage (per OS user, file-based) ───────────────────────────
 
+// P4 search files in workspace
+ipcMain.handle('p4-search-files', async (event, { pattern, client }) => {
+  try {
+    const clientToUse = client || p4Config.client;
+    if (!clientToUse) {
+      return { success: false, error: 'No P4 workspace selected', files: [] };
+    }
+    // Use p4 files with a wildcard pattern under the workspace view
+    // Search across all depot paths: //.../*pattern*
+    const searchPattern = `//.../*${pattern}*`;
+    const { stdout } = await runP4Command(`files "${searchPattern}"`, clientToUse);
+    const files = [];
+    const lines = stdout.split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      const match = line.match(/^(.+)#(\d+)\s+-\s+(\w+)/);
+      if (match && match[3] !== 'delete') {
+        files.push({
+          depotFile: match[1],
+          revision: parseInt(match[2]),
+          action: match[3],
+          name: match[1].split('/').pop(),
+        });
+      }
+    }
+    // Also try to resolve local paths via p4 where
+    const filesWithLocal = [];
+    // Batch resolve up to 200 results for performance
+    const filesToResolve = files.slice(0, 200);
+    for (const file of filesToResolve) {
+      try {
+        const { stdout: whereOut } = await runP4Command(`where "${file.depotFile}"`, clientToUse);
+        const whereLine = whereOut.split('\n').find(l => l.trim() && !l.startsWith('-'));
+        if (whereLine) {
+          // p4 where output: depotPath viewPath localPath
+          const parts = whereLine.trim().split(/\s+/);
+          if (parts.length >= 3) {
+            file.localFile = parts.slice(2).join(' ');
+          }
+        }
+      } catch { /* no local mapping */ }
+      filesWithLocal.push(file);
+    }
+    return { success: true, files: filesWithLocal };
+  } catch (error) {
+    if (error.message?.includes('no such file') || error.message?.includes('must refer to client')) {
+      return { success: true, files: [] };
+    }
+    return { success: false, error: error.message, files: [] };
+  }
+});
+
 function getFavoritesFilePath() {
   const userDataPath = app.getPath('userData');
   return path.join(userDataPath, 'favorites.json');

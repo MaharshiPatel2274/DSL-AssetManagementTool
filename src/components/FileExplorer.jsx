@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Folder, File, ChevronRight, ChevronDown, Search, RefreshCw, Star, Plus, Unlock, GitBranch, Pin, X as XIcon } from 'lucide-react';
+import { Folder, File, ChevronRight, ChevronDown, Search, RefreshCw, Star, Plus, Unlock, GitBranch, Pin, X as XIcon, HardDrive, Database, Loader } from 'lucide-react';
 import './FileExplorer.css';
 
 const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFolderChange }) => {
@@ -17,6 +17,10 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
   const [p4Clients, setP4Clients] = useState([]);
   const [selectedP4Client, setSelectedP4Client] = useState('');
   const cleanupRef = useRef(null);
+  const [searchMode, setSearchMode] = useState('local'); // 'local' or 'p4'
+  const [p4SearchResults, setP4SearchResults] = useState([]);
+  const [p4Searching, setP4Searching] = useState(false);
+  const searchTimerRef = useRef(null);
 
   // Check P4 availability and load workspaces
   useEffect(() => {
@@ -292,6 +296,91 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
     }
   };
 
+  // Collect flat list of matching files from tree (for local search)
+  const collectFlatSearchResults = (node, term) => {
+    if (!node || !term) return [];
+    const results = [];
+    const lowerTerm = term.toLowerCase();
+    const walk = (n) => {
+      if (n.type === 'file') {
+        let matches = n.name.toLowerCase().includes(lowerTerm);
+        if (!matches) {
+          const meta = fileMetadata?.[n.path];
+          if (meta) {
+            if (meta.title?.toLowerCase().includes(lowerTerm)) matches = true;
+            else if (meta.author?.toLowerCase().includes(lowerTerm)) matches = true;
+            else if (meta.notes?.toLowerCase().includes(lowerTerm)) matches = true;
+            else if (Array.isArray(meta.tags) && meta.tags.some(t => t.toLowerCase().includes(lowerTerm))) matches = true;
+            else {
+              for (const [, value] of Object.entries(meta)) {
+                if (typeof value === 'string' && value.toLowerCase().includes(lowerTerm)) { matches = true; break; }
+              }
+            }
+          }
+        }
+        if (matches) results.push(n);
+      } else if (n.children) {
+        n.children.forEach(walk);
+      }
+    };
+    walk(node);
+    return results;
+  };
+
+  // Navigate to folder containing a file
+  const navigateToFileFolder = async (filePath) => {
+    // Get the parent directory
+    const sep = filePath.includes('/') ? '/' : '\\';
+    const parts = filePath.split(sep);
+    parts.pop(); // remove filename
+    const folderPath = parts.join(sep);
+    
+    setRootPath(folderPath);
+    if (onFolderChange) onFolderChange(folderPath);
+    const tree = await window.electron.readDirectoryTree(folderPath);
+    setFileTree(tree);
+    setExpandedFolders(new Set([folderPath]));
+    setSelectedFiles(new Set());
+    setSearchTerm('');
+    setActiveTab('files');
+  };
+
+  // P4 search handler with debounce
+  const handleP4Search = useCallback(async (term) => {
+    if (!term || term.length < 2 || !selectedP4Client) {
+      setP4SearchResults([]);
+      return;
+    }
+    setP4Searching(true);
+    try {
+      const result = await window.electron.p4SearchFiles({ pattern: term, client: selectedP4Client });
+      if (result.success) {
+        setP4SearchResults(result.files);
+      } else {
+        setP4SearchResults([]);
+      }
+    } catch (err) {
+      console.error('P4 search failed:', err);
+      setP4SearchResults([]);
+    } finally {
+      setP4Searching(false);
+    }
+  }, [selectedP4Client]);
+
+  // Handle search input with debounce for P4 mode
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    if (searchMode === 'p4') {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      if (value.length >= 2) {
+        searchTimerRef.current = setTimeout(() => handleP4Search(value), 500);
+      } else {
+        setP4SearchResults([]);
+      }
+    }
+  };
+
   useEffect(() => {
     if (fileTree) {
       const files = [];
@@ -536,10 +625,29 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
         <Search size={16} />
         <input
           type="text"
-          placeholder="Search files & tags..."
+          placeholder={searchMode === 'p4' ? 'Search P4 workspace files...' : 'Search files & tags...'}
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={handleSearchChange}
         />
+        {p4Available && (
+          <div className="search-mode-toggle">
+            <button
+              className={`search-mode-btn ${searchMode === 'local' ? 'active' : ''}`}
+              onClick={() => { setSearchMode('local'); setP4SearchResults([]); }}
+              title="Search local folder"
+            >
+              <HardDrive size={14} />
+            </button>
+            <button
+              className={`search-mode-btn ${searchMode === 'p4' ? 'active' : ''}`}
+              onClick={() => { setSearchMode('p4'); }}
+              title="Search P4 workspace"
+            >
+              <Database size={14} />
+            </button>
+          </div>
+        )}
+        {p4Searching && <Loader size={14} className="spinning" />}
       </div>
 
       {/* Toolbar: Select All + P4 Actions */}
@@ -596,12 +704,129 @@ const FileExplorer = ({ onSelectionChange, onFileDoubleClick, fileMetadata, onFo
 
       <div className="tree-view">
         {activeTab === 'files' ? (
-          displayTree ? renderTreeNode(displayTree) : (
-            <div className="empty-state">
-              <Folder size={48} color="#cccccc" />
-              <p>No folder selected</p>
-              <p className="empty-hint">Click "Browse Folder" to start</p>
-            </div>
+          // P4 search mode with results
+          searchMode === 'p4' && searchTerm.length >= 2 ? (
+            p4Searching ? (
+              <div className="empty-state">
+                <Loader size={32} className="spinning" color="#3D8B1F" />
+                <p>Searching P4 workspace...</p>
+              </div>
+            ) : p4SearchResults.length > 0 ? (
+              <div className="flat-search-results">
+                <div className="search-results-header">
+                  {p4SearchResults.length} file{p4SearchResults.length !== 1 ? 's' : ''} found in P4
+                </div>
+                {p4SearchResults.map((file) => (
+                  <div
+                    key={file.depotFile}
+                    className="tree-item file-item search-result-item"
+                    style={{ paddingLeft: '10px' }}
+                    onDoubleClick={() => {
+                      if (file.localFile) {
+                        handleFileDoubleClick({ path: file.localFile, name: file.name, type: 'file' });
+                      }
+                    }}
+                  >
+                    <span className="file-icon">{getFileIcon(file.name)}</span>
+                    <div className="file-info">
+                      <span className="file-name">{file.name}</span>
+                      <span
+                        className="file-path-link"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (file.localFile) {
+                            navigateToFileFolder(file.localFile);
+                          }
+                        }}
+                        title={file.localFile || file.depotFile}
+                      >
+                        {file.localFile || file.depotFile}
+                      </span>
+                    </div>
+                    <span className="file-revision">#{file.revision}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <Search size={32} color="#cccccc" />
+                <p>No files found</p>
+                <p className="empty-hint">Try a different search term</p>
+              </div>
+            )
+          ) : searchTerm && searchMode === 'local' && fileTree ? (
+            // Local search — flat file results
+            (() => {
+              const flatResults = collectFlatSearchResults(fileTree, searchTerm);
+              return flatResults.length > 0 ? (
+                <div className="flat-search-results">
+                  <div className="search-results-header">
+                    {flatResults.length} file{flatResults.length !== 1 ? 's' : ''} found
+                  </div>
+                  {flatResults.map((node) => {
+                    const isSelected = selectedFiles.has(node.path);
+                    const isFav = isFavorited(node.path);
+                    // Derive folder from path
+                    const sep = node.path.includes('/') ? '/' : '\\';
+                    const folderPath = node.path.split(sep).slice(0, -1).join(sep);
+                    return (
+                      <div
+                        key={node.path}
+                        className={`tree-item file-item search-result-item ${isSelected ? 'selected' : ''}`}
+                        style={{ paddingLeft: '10px' }}
+                        onDoubleClick={() => handleFileDoubleClick(node)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleFileSelection(node)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <span className="file-icon">{getFileIcon(node.name)}</span>
+                        <div className="file-info">
+                          <span className="file-name">{node.name}</span>
+                          <span
+                            className="file-path-link"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigateToFileFolder(node.path);
+                            }}
+                            title={folderPath}
+                          >
+                            {folderPath}
+                          </span>
+                          <span className="file-meta">
+                            {formatFileSize(node.size)} • {new Date(node.lastModified).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <button
+                          className={`favorite-btn ${isFav ? 'active' : ''}`}
+                          onClick={(e) => toggleFavorite(e, node.path, 'file')}
+                          title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                        >
+                          <Star size={14} fill={isFav ? '#f5a623' : 'none'} color={isFav ? '#f5a623' : '#999'} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <Search size={32} color="#cccccc" />
+                  <p>No matches found</p>
+                  <p className="empty-hint">Try a different search term</p>
+                </div>
+              );
+            })()
+          ) : (
+            // Default tree view (no search active)
+            displayTree ? renderTreeNode(displayTree) : (
+              <div className="empty-state">
+                <Folder size={48} color="#cccccc" />
+                <p>No folder selected</p>
+                <p className="empty-hint">Click "Browse Folder" to start</p>
+              </div>
+            )
           )
         ) : (
           favorites.length > 0 ? (
